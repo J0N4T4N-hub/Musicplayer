@@ -1,0 +1,49 @@
+name: Gerar APK do JNT Player
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Localizar o projeto (pasta ou ZIP enviado)
+        id: find
+        run: |
+          dir=""
+          if [ -f settings.gradle.kts ]; then
+            dir="."
+          elif ls ./*.zip >/dev/null 2>&1; then
+            mkdir -p _src
+            unzip -q -o "$(ls ./*.zip | head -n1)" -d _src
+            found="$(find _src -name settings.gradle.kts | head -n1)"
+            if [ -n "$found" ]; then dir="$(dirname "$found")"; fi
+          fi
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          if [ -z "$dir" ]; then echo "Projeto ainda não enviado. Envie o ZIP do JNT Player."; fi
+
+      - uses: actions/setup-java@v4
+        if: steps.find.outputs.dir != ''
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.find.outputs.dir != ''
+        with:
+          gradle-version: '8.9'
+
+      - name: Compilar APK
+        if: steps.find.outputs.dir != ''
+        working-directory: ${{ steps.find.outputs.dir }}
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Publicar APK
+        if: steps.find.outputs.dir != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: JNT-Player-APK
+          path: ${{ steps.find.outputs.dir }}/app/build/outputs/apk/release/*.apk
